@@ -136,7 +136,8 @@ module.exports = {
                     resetID = md5(resetID);
                     var resetLink = global.PASSWORD_RESET_LINK + resetID;
                    // console.log(resetLink);
-                    var command = 'node ' + 'd:\\FTWorks\\WebSiteDocs\\server\\email_notification\\sendEmailNotification.js "T2-FORGOT_PASSWORD" ' + '"' + email + '" "' + resetLink + '"';
+			//local Path of file 
+                  var command = 'node ' + 'd:\\App\\WebSite\\server\\email_notification\\sendEmailNotification.js "T2-FORGOT_PASSWORD" ' + '"' + email + '" "' + resetLink + '"';
                    // console.log(command);
                     exec(command,
                         function (error, stdout, stderr) {

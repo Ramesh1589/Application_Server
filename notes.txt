@@ -1,0 +1,375 @@
+
+
+Auth-check file
+============
+const jwt = require('jsonwebtoken');
+var global = require('./global.js');
+const jwtAuthLog = require('./Logger.js');
+const fs = require('fs');
+var cronJob = require('cron').CronJob;
+const moment = require('moment');
+const appconfig = require('./appconfig');
+const config = appconfig.readconfig();
+var LoggingDir = config.server.LoggingDir;
+
+if(LoggingDir == undefined)
+LoggingDir = "./logs/";
+if ( !fs.existsSync( LoggingDir ) ) {
+	// Create the directory if it does not exist
+	fs.mkdirSync( LoggingDir );
+}
+var currntdate = moment(new Date()).format("YYYYMMDD");
+var logDir = LoggingDir + currntdate;
+if ( !fs.existsSync( logDir ) ) {
+	// Create the directory if it does not exist
+	fs.mkdirSync( logDir );
+}
+var jwtAuthCheckLog = logDir + "/" + currntdate + "_jwtAuthCheck.log";
+var loginJob = new cronJob({
+	cronTime : '10 00 00 * * *',	
+    onTick : updateLogFile,
+    start : true,
+    timezone : 'Asia/Kolkata'
+});
+function updateLogFile(){
+	currntdate = moment(new Date()).format("YYYYMMDD");
+	logDir = LoggingDir + currntdate;
+	if ( !fs.existsSync( logDir ) ) {
+		// Create the directory if it does not exist
+		fs.mkdirSync( logDir );
+	}	
+	jwtAuthCheckLog = logDir + "/" + currntdate + "_jwtAuthCheck.log";
+}
+module.exports = function(req, res,next){
+    var token;
+    var responseData = {};
+    responseData.status = -1;    
+    var logData = {};
+    logData.errMessage = "Unauthorized Access.";
+    logData.remoteAdd = req._remoteAddress;
+    logData.jwtToken = token;
+    logData.timestamp = moment(new Date()).format("YYYY-DD-MM HH:mm:ss:ms");
+    try {
+        token = req.headers.authorization;
+        if(token == undefined){
+            fs.appendFile(jwtAuthCheckLog, JSON.stringify(logData) + "\n", function (err) {
+                if (err) console.log(err.message);
+            });
+            responseData[global.message] = "Authentication Failed.";            
+            return res.status(500).json(responseData);        
+        }
+        var decode = jwt.verify(token, global.JWT_SECRET);
+        var nIndex = global.jwtTokens.indexOf(token);
+        if(nIndex < 0){            
+            responseData[global.message] = "Authentication Failed.";            
+            fs.appendFile(jwtAuthCheckLog, JSON.stringify(logData) + "\n", function (err) {
+                if (err) console.log(err.message);
+            });
+            return res.status(500).json(responseData);        
+        }      
+        next();
+    }catch(error) {
+        var nIndex = global.jwtTokens.indexOf(token);
+        if(nIndex > 0){
+            global.jwtTokens.splice(nIndex,1);
+        }        
+        responseData[global.message] = "Authentication Failed.";            
+        fs.appendFile(jwtAuthCheckLog, JSON.stringify(logData) + "\n", function (err) {
+            if (err) console.log(err.message);
+        });
+        return res.status(500).json(responseData);       
+    }   
+};
+=================End========================
+
+===========APIHandler===========
+
+const FILE_NAME = ' APIHandler.js ';
+// const DBConnection = require('./DBOperations/MySQLOperations');  //Database operations 
+var dummyData;
+const dbService = require('./callDatabaseService.js');  //Database operations 
+const global = require('./global.js');
+const md5 = require('md5');
+const md5File = require('md5-file')
+const moment = require('moment');
+const jwt = require('jsonwebtoken');
+const randomstring = require('randomstring');
+const arrayUniq = require('array-uniq');
+var multer = require('multer');
+var exec = require('child_process').exec;
+var fs = require('fs');
+var client = require('scp2');
+// var needle = require('needle');
+var FormData = require('form-data');
+var http = require('http');
+var path = require('path');
+var mime = require('mime');
+
+module.exports = {   
+
+    userLogin: function (request, response) {
+        const FUNC_NAME = " userLogin() ";
+        var responseData = {};
+        responseData.status = 1;
+        try {
+            var user = request.body[global.userName];
+            var pass = request.body[global.userPassword];
+            var password = global.SALT + pass;
+            password = md5(password);
+            if(user == undefined || pass == undefined){
+                responseData[global.message] = "Invalid username or password";
+                responseData.status = -1;
+                response.status(300).send(responseData);
+                return;
+            }
+            var requestData = {};
+            requestData.user = user;   //Temporary
+            dbService.callDBService("login", requestData).then(function (resp) {
+                var userData = JSON.parse(resp)[0];
+                if (userData != undefined && userData.sPassword == password) {
+                    var currntdatetime = moment(new Date()).format("YYYYMMDDHHmmssms");
+                    var sessionID = user + currntdatetime + global.SALT;
+                    sessionID = md5(sessionID);
+                    jwtToken = jwt.sign(request.body, global.JWT_SECRET, { expiresIn: '5h' });
+                    responseData[global.sessionId] = sessionID;
+                    responseData[global.jwtToken] = jwtToken;
+                    responseData[global.userName] = userData.sUserName;
+                    responseData.role = userData.nRole;
+                    responseData.company = userData.sCompanyName;
+                    responseData.nFacilityOnOff = userData.nFacilityOnOff;
+                    responseData.nIsDownloadUploadOnOff = userData.nIsDownloadUploadOnOff;
+                    responseData.nIsCustomTemplate = userData.nIsCustomTemplate;
+                    responseData[global.message] = "Login Successful";
+                    global.jwtTokens.push(jwtToken);
+                    //Mapping SessionId With Customer ID
+                    global.session[sessionID] = userData.nCustomerId;
+                } else {
+                    responseData.status = -1;
+                    responseData[global.message] = "Invalid username or password";
+                    // console.log("Invalid password");
+                }
+                response.status(200).send(responseData);
+            }).catch(function (err) {
+                responseData.status = -1;
+                responseData[global.message] = "something went wrong while login, Please try again.";
+                response.status(300).send(responseData);
+                console.log(err.message + FUNC_NAME);
+            })
+        } catch (err) {
+            responseData.status = -1;
+            responseData[global.message] = "something went wrong while login, Please try again.";
+            response.status(300).send(responseData);
+            console.log(err.message + FUNC_NAME);
+            // logger.writeLog(err.message + FUNC_NAME + FILE_NAME, dummyData, 'fatal');
+        }
+    },
+
+    userLogout: function (request, response) {
+        const FUNC_NAME = " userLogout() ";
+        var responseData = {};
+        responseData.status = 1;
+        try {
+            // console.log("API Call received");
+            var sessionId = request.body.requestData[global.sessionId];
+            if(sessionId != undefined){
+                delete global.session[sessionId];
+            }
+            var jwtToken = request.headers.authorization;	
+            var nIndex = global.jwtTokens.indexOf(jwtToken);
+            if(nIndex >= 0){
+                global.jwtTokens.splice(nIndex,1);
+            }
+            responseData[global.message] = "Successfully logged out."
+            response.status(200).send(responseData);            
+            
+        } catch (err) {
+            responseData.status = -1;
+            responseData[global.message] = "something went wrong while logout, Please try again.";
+            response.status(300).send(responseData);
+            console.log(err.message + FUNC_NAME);
+            // logger.writeLog(err.message + FUNC_NAME + FILE_NAME, dummyData, 'fatal');
+        }
+    },
+	
+	   //Forgot Password
+    forgotPassword: function (request, response) {
+        const FUNC_NAME = " forgotPassword() ";
+        var responseData = {};
+        responseData.status = 1;
+        try {
+        //    console.log(request.body);
+            var email = request.body.email;
+          
+            if (email == undefined || email == '') {
+                responseData[global.message] = "Invalid Email Address.";
+                responseData.status = -1;
+                response.status(300).send(responseData);
+                return;
+            }
+            var requestData = {};
+            requestData.email = email;
+            // console.log("API Call received");              
+
+            dbService.callDBService("forgotPassword", requestData).then(function (resp) {
+                if (JSON.parse(resp).length > 0) {
+                    var userData = JSON.parse(resp)[0];
+                    var tempPassword = randomstring.generate(8);
+
+                    //send email notification
+                    var currntdatetime = moment(new Date()).format("YYYYMMDDHHmmssms");
+                    var resetID = email + currntdatetime + global.SALT;
+                    resetID = md5(resetID);
+                    var resetLink = global.PASSWORD_RESET_LINK + resetID;
+                   // console.log(resetLink);
+                    var command = 'node ' + 'd:\\FTWorks\\WebSiteDocs\\server\\email_notification\\sendEmailNotification.js "T2-FORGOT_PASSWORD" ' + '"' + email + '" "' + resetLink + '"';
+                   // console.log(command);
+                    exec(command,
+                        function (error, stdout, stderr) {
+                                if (error !== null) {
+                                    // console.log('exec error: ' + error);
+                                    responseData.status = -1;
+                                    responseData[global.message] = "Something went wrong while password reset, Please try again.";
+                                    response.status(300).send(responseData);
+                                    console.log(err.message + FUNC_NAME);
+                                }
+                                else {                                    
+                                    responseData[global.message] = "Password verification link has been sent to your email id.";                   
+                                    response.status(300).send(responseData);                                    
+                                    global.forgotPasswordMap[resetID] = {};
+                                    global.forgotPasswordMap[resetID].tempPassword = tempPassword;
+                                    global.forgotPasswordMap[resetID].currntDateTime = moment(new Date()).format("YYYY-MM-DD HH:mm:ss");
+                                    global.forgotPasswordMap[resetID].userId = email;
+                                    global.forgotPasswordMap[resetID].customerId = userData.nCustomerId;
+                                }
+                        });
+
+                    
+                } else {
+                    responseData[global.message] = "Email does not exist.";
+                    responseData.status = -1;
+                    response.status(300).send(responseData);
+                    return;
+                }
+
+            }).catch(function (err) {
+                responseData.status = -1;
+                responseData[global.message] = "Something went wrong while password reset, Please try again.";
+                response.status(300).send(responseData);
+                console.log(err.message + FUNC_NAME);
+            })
+
+        } catch (err) {
+            responseData.status = -1;
+            responseData[global.message] = "Something went wrong while password reset, Please try again.";
+            response.status(300).send(responseData);
+            console.log(err.message + FUNC_NAME);
+          
+        }
+    },
+
+    passwordReset: function (request, response) {
+        const FUNC_NAME = " passwordReset() ";        
+        try {
+            // console.log("API Call received");                                   
+            var resetID = request.query.id;            
+            var passwordResetData = global.forgotPasswordMap[resetID];
+            if(passwordResetData == undefined || passwordResetData == {}){
+                response.send("Failed to reset the password. Please try again.")
+            }
+            var requestData = {};
+            requestData.customerID = passwordResetData.customerId;
+            requestData.userName = passwordResetData.userId;
+            var newPass = global.SALT + passwordResetData.tempPassword;
+            var newPass = md5(newPass);            
+            requestData.newPass = newPass;
+
+            dbService.callDBService("updatepassword", requestData).then(function (resp) {
+                response.send("Your password is set to " + passwordResetData.tempPassword + ". Kindly change the password as soon as login.");                                
+            }).catch(function (err) {
+                response.send("Failed to reset the password. Please try again.");
+            });
+        } catch (err) {
+            response.send("Failed to reset the password. Please try again.")
+            console.log(err.message + FUNC_NAME);
+            // logger.writeLog(err.message + FUNC_NAME + FILE_NAME, dummyData, 'fatal');
+        }
+    },
+	
+	
+
+};
+
+
+
+======End====================
+=======CallDBService.js========
+const FILE_NAME = ' callWebService.js ';
+var dummyData;
+const http = require('http');
+var https = require('https');
+const moment = require('moment');
+const Q = require('q');
+
+module.exports = {
+    callDBService: function (api, requestData) {
+        const FUNC_NAME = "callDBService() ";
+        var deferred = Q.defer();
+        try {
+             var requestType;
+             var options = {};
+            var msg = "";
+            
+              
+                options = {
+                    hostname: "localhost",
+                    port: "1210",
+                    path: "/api/" + api,
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                };
+            
+            const req = http.request(options, (res) => {
+                res.on('data', (chunk) => {
+                    // console.log("got data");                    
+                    msg += chunk.toString('utf8');
+                });
+                res.on('end', () => {
+                    // console.log("got end");
+                    deferred.resolve(msg);
+                    //return callback(false, msg);
+                });                
+            });
+            req.on('error', (e) => {
+                deferred.reject(e);
+                console.log(e.message + FUNC_NAME);
+            });
+            req.write(JSON.stringify(requestData));
+            req.end();
+            return deferred.promise;
+        } catch (err) {
+            deferred.reject(err);
+            console.log(err.message + FUNC_NAME);
+            
+        }
+    },
+};
+====================================End===========
+
+=========AppConfig.js=================
+var fs = require('fs');
+module.exports = {
+    readconfig : function () {
+        try {
+            var configFile = 'config.json';
+            var data = fs.readFileSync(configFile, "utf8");
+            var config = JSON.parse(data.toString('utf8').replace(/^\uFEFF/, ''));
+            return config;          
+        } catch (err) {
+            console.error(err);
+             throw new Error("Config file not found....");
+        }
+    }
+}
+=============================

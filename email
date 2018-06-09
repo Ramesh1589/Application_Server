@@ -1,0 +1,418 @@
+
+
+EmailNotification Format folder Structure
+
+===========================
+---email_notification
+	|---config
+	|	|-------default.json	
+	|
+	|---emailTemplateMaster.json
+	|
+	|---sendEmailNotification.js
+	|
+	|---testreq.json
+	
+	
+	
+	
+	========================
+	default.json
+	=========================
+	{
+  "Config"     : {
+    "port"              : 12160
+  },
+  "BillingURL" : "https://www.google.co.in/",
+  "Database"   : {
+	"host"     : "",
+	"user"     : "",
+    "password" : "",
+    "database" : ""
+  },
+  "EmailService"   : {
+
+	  "host"     : "",
+	  "port"     : "",
+     "sendNotificationUrl" : "/sendNotificationRequest",
+     "getEmailUrl" : "/getEmail"
+  }
+}
+
+========================Default Json End=========
+
+
+emailTemplateMaster.json
+==========================
+{
+    "templates": [
+        {
+            "TemplateName": "T1-EOD_Report",
+            "Bcc":"",
+            "StoredProcedureName": "call stp_EmailEODReport(<CustomerId>,<SegmentGroupId>);",
+            "body": "<html><head><!--<link rel='stylesheet' href='bootstrap/dist/css/bootstrap.css'>--><style>body {font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;line-height: 1.42857143;color: #333;background-color: #fff;margin: 8px;}.panel {padding: 0px !important;border: 1px solid transparent;border-color: #bdc5c6;border-radius: 0px;-webkit-box-shadow: 0 1px 1px rgba(0, 0, 0, .05);box-shadow: 0 1px 1px rgba(0, 0, 0, .05);}.panel-heading {padding: 10px 15px;border-bottom: 1px solid transparent;border-radius: 0px;height: 60px;background-color: #bdc5c6;}.panel-body {padding: 15px;}img {height: 50px;}h4 {font-size: 16px;margin-top: 10px;margin-bottom: 10px;}h5 {font-size: 14px;margin-top: 10px;margin-bottom: 10px;}table {font-family: arial, sans-serif;border-collapse: collapse;width: 500;}td,th {text-align: center;border: 1px solid #cecaca;padding: 8px;}.callstatus {text-align: left !important;}tr.th.header {font-weight: 900;}.data {color: #00b8e6;font-weight: bold;}.footerhead {}.footer {}</style></head><body><div class='panel'><div class='panel-heading'> <img class='banerimage' alt='ODIN VoiceCAST' src='https://s3.ap-south-1.amazonaws.com/odinvoice/odinbaner1.png'></div><div class='panel-body'><h4 style='font-weight: 900;'>Dear #CustomerName#,</h4><br /><h5 style='font-weight: bold;'>The trade confirmation calls for Transaction Date: #TransactionDate# of segment group id: [#SegmentGroupName#- #SegmentGroupId#] is completed. The summary of calls are as follows:</h5><table><tr><th class='header'>#</th><th class='header callstatus'>Status</th><th class='header'>Counts</th></tr><tr><td class='data'>1</td><td class='data callstatus'>Total Calls</td><td>#TotalCount#</td></tr><tr><td class='data'>2</td><td class='data callstatus'>Complete Calls</td><td>#CompletedCount#</td></tr><tr><td class='data'>3</td><td class='data callstatus'>Accepted Calls</td><td>#AcceptedCount#</td></tr><tr><td class='data'>4</td><td class='data callstatus'>Rejected Calls</td><td>#RejectedCount#</td></tr><tr><td class='data'>5</td><td class='data callstatus'>Incomplete Calls</td><td>#InCompletedCount#</td></tr><tr><td class='data'>6</td><td class='data callstatus'>Unanswered / Busy Calls</td><td>#UnansweredBusy#</td></tr></table><br /><h4 id='footerhead'>Warm Regards<br><span style='font-style:Italic'> ODIN Voice<span></h4>   <div id='footer' ><span style= 'font-style:Italic; font-size:12px; font-weight: bold'>***This is an auto generated email, please do not reply to the same. Replies to this email id are not monitored and hence will not be attended to. In case of any query please contact our Customer support team.***</span><p style='font-size:12px;'>Disclaimer:--------------------------------------------------------------------------<br> The informationin this E-mail (which includes any files transmitted with it) is CONFIDENTIAL and may be legally PRIVILEGED.It is intended solely for the addressee and access to this email by anyone else is unauthorized. If youhave received it in error, please destroy any copies of this message, including any attachments, anddelete it from your system notifying the sender immediately. Any disclosure, copying, distribution, dissemination,forwarding, printing or any action taken or omitted to be taken in reliance on it or utilising the samefor any purpose other than what it is intended for, is prohibited and may be unlawful.<br>-----------------------------------------------------------------------------------------</p></div></div></div></body></html>"
+        },
+        {
+            "TemplateName": "T2-FORGOT_PASSWORD",
+            "subject":"ODIN Voice Password Assistance",
+            "Bcc":"",    
+                    
+            "body": "<html><body><p>We received a request to reset the password associated with this e-mail address. If you made this request, please follow the instructions below.</p><p>Click the link below to reset your password using our secure server:</p><a href='#VerificationLink#'>#VerificationLink#</a><p>If you did not request to have your password reset you can safely ignore this email. Rest assured your customer account is safe.</p><p>If clicking the link doesn't seem to work, you can copy and paste the link into your browser's address window, or retype it there. Once you have returned to ODIN Voice, we will give instructions for resetting your password.</p><p>ODIN Voice will never e-mail you and ask you to disclose or verify your ODIN Voice password, credit card, or banking account number. If you receive a suspicious e-mail with a link to update your account information, do not click on the link--instead, report the e-mail to ODIN Voice for investigation. Thanks for visiting ODIN Voice!</p></body></html>"
+        }
+    ]
+}
+===End emailTemplateMaster.json =======
+
+
+=sendNotification.js===============
+// all require modules
+process.env.NODE_CONFIG_DIR  = "D:\\FTWorks\\WebSiteDocs\\server\\email_notification\\config";
+var http = require('http');
+var fs = require("fs");
+var config = require('config');
+var AWS = require('aws-sdk');
+
+//read Template File
+var templateFile = __dirname + '\\emailTemplateMaster.json';
+var data = fs.readFileSync(templateFile, "utf8");
+var templates = JSON.parse(data.toString('utf8').replace(/^\uFEFF/, ''));
+
+var Email_Templates = {};
+templates.templates.forEach(function (element) {
+    Email_Templates[element.TemplateName] = element;
+});
+
+
+// all environments
+var failedMsg = "";
+
+AWS.config.update({ accessKeyId: 'AKIAJNP5ND2E3E2BIIEA', secretAccessKey: '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' });
+
+function uploadToS3(filename, callback) {
+    fs.readFile(filename, function (err, data) {
+        if (err) { callback(true, err); }
+
+        var base64data = new Buffer(data, 'binary');
+
+        var s3 = new AWS.S3();
+        s3.putObject({
+            Bucket: 'billing-pdf-files',
+            Key: filename,
+            Body: base64data
+            //ACL: 'public-read'
+        }, function (resp) {
+            console.log(arguments);
+            console.log(resp);
+            callback(false, arguments);
+            console.log('Successfully uploaded package.');
+        });
+        // s3.deleteObject({ Key: 'google1.pdf', Bucket: 'billing-pdf-files' }, function (err, data) {
+        //     if (err) {
+        //         console.log('There was an error deleting your photo: ', err.message);
+        //     }
+        //     console.log('Successfully deleted photo.');
+        //     //viewAlbum(albumName);
+        // });
+
+    });
+}
+
+// for communication with BLS
+function sendDataToEmailService(url, postData, callback) {
+
+    var msg = "";
+    const options = {
+        hostname: config.get('EmailService.host'),
+        port: config.get('EmailService.port'),
+        path: url,
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    };
+
+    const req = http.request(options, (res) => {
+
+        // if (res.statusCode !== 200) {
+        //     return callback(true, res.statusCode + '|' + res.statusMessage);
+        // }
+        res.on('data', (chunk) => {
+            msg += chunk;
+        });
+        res.on('end', () => {
+            return callback(false, msg);
+        });
+    });
+
+    req.on('error', (e) => {
+        return callback(true, e.message);
+    });
+
+    // write data to request body
+    req.write(JSON.stringify(postData));
+    //req.write(postData);
+    req.end();
+
+}
+
+function createEmailTemplate(emailBody, values) {
+    // console.log(emailBody);
+    for (var key in values) {
+        var replace = new RegExp(key, "g");
+        // console.log(replace);
+        emailBody = emailBody.replace(replace, values[key]);
+    }
+    // console.log(emailBody);
+    return emailBody;
+}
+
+function getTemplate(templateId) {
+    return Email_Templates[templateId];
+}
+// POST: receive heartbeat data
+
+function sendEmail(JSONData,emailBody)
+{    
+        console.log("To:" + JSONData.emailParamDto.sTo + " Cc:" + JSONData.emailParamDto.sCc + " sBcc:" + JSONData.emailParamDto.sBcc + " Subject:" + JSONData.emailParamDto.sSubject);
+        JSONData.emailParamDto.sBody = emailBody;
+        //Add Register Serivce Call
+        sendDataToEmailService(config.get('EmailService.sendNotificationUrl'), JSONData, function (err, Emailresp) {
+            // console.log(Emailresp);
+            if (err) {
+                console.log(err.message + FUNC_NAME);
+                console.error(failedMsg);
+                process.exit(1);
+            }
+            else {
+                console.log(JSON.parse(Emailresp).message);
+                process.exit(0);
+            }                       //TODO: add response to database
+            return;
+    });
+}
+
+function sendEmailNotification() {
+
+    //process.argv[2]  is template id
+    const FUNC_NAME = " sendEmailNotification()";
+    try {
+        var emailBody = "";
+        var postData = "";
+        var JSONData = "";
+        switch (process.argv[2]) {
+            case "T1-EOD_Report": {
+                //process.argv[3]  is customer id & //process.argv[4]  is segment group id
+                failedMsg = "Failed to send email to CustomerId " + process.argv[3] + " and SegmentGroupId " + process.argv[4];
+
+                var mysql = require('mysql');
+                var connection = mysql.createConnection({
+                    host: config.get('Database.host'),
+                    user: config.get('Database.user'),
+                    password: config.get('Database.password'),
+                    database: config.get('Database.database')
+                });
+
+                // database connection 
+                connection.connect(function (err) {
+                    if (err) {
+                        console.error('error connecting: ' + err.message);
+                        console.error(failedMsg);
+                        process.exit(1);
+                        return;
+                    }
+                    // console.log('connected as id ' + connection.threadId);
+                });
+
+
+                if (process.argv.length < 5) {
+                    console.log("insufficient number of arguments");
+                    console.error(failedMsg);
+                    process.exit(1);
+                    return;
+                }
+
+                var templateObj = getTemplate(process.argv[2]);                
+                if (templateObj == undefined) {
+                    console.log("Email template not found.");
+                    console.error(failedMsg);
+                    process.exit(1);
+                    return;
+                }
+                var query = templateObj.StoredProcedureName;
+                query = query.replace(/<CustomerId>/g, process.argv[3]);
+                query = query.replace(/<SegmentGroupId>/g, process.argv[4]);
+
+                connection.query(query, function (error, results, fields) {
+                    if (error) {
+                        console.log(error.message + FUNC_NAME);
+                        console.error(failedMsg);
+                        process.exit(1);
+                    }
+                    else {
+                        emailBody = createEmailTemplate(templateObj.body, results[0][0]);
+                        postData = fs.readFileSync(__dirname + "\\testreq.json");
+                        JSONData = JSON.parse(postData);                        
+                        JSONData.emailParamDto.sTo = results[0][0]['#TOEmailIdList#'];
+                        JSONData.emailParamDto.sCc = results[0][0]['#CCEmailIdList#'];
+                        JSONData.emailParamDto.sSubject = results[0][0]['#SubjectText#'];
+                        JSONData.emailParamDto.sBcc = templateObj.Bcc;  //odin voicecast support
+
+                        sendEmail(JSONData,emailBody);
+                    }
+                });
+            }
+            break;
+
+            case "T2-FORGOT_PASSWORD":
+            {
+                //process.argv[3]  is To & //process.argv[4]  verification link;
+                failedMsg = "Failed to send password reset email.";
+                if (process.argv.length < 5) {
+                    console.log("insufficient number of arguments");
+                    console.error(failedMsg);
+                    process.exit(1);
+                    return;
+                }                
+                var templateObj = getTemplate(process.argv[2]);
+                if (templateObj == undefined) {
+                    console.log("Email template not found.");
+                    console.error(failedMsg);
+                    process.exit(1);
+                    return;
+                }
+                emailBody = templateObj.body.replace(/#VerificationLink#/g, process.argv[4]);
+                postData = fs.readFileSync(__dirname + "\\testreq.json");
+                JSONData = JSON.parse(postData);
+
+                JSONData.emailParamDto.sTo = process.argv[3];                
+                JSONData.emailParamDto.sSubject = templateObj.subject;
+                JSONData.emailParamDto.sBcc = templateObj.Bcc;  //odin voicecast support
+                sendEmail(JSONData,emailBody);
+            }
+            break;
+
+            default: {
+                console.log("Invalid template.");
+                process.exit(1);
+                return;
+            }
+        };
+        
+    }
+    catch (err) {
+        console.log(err.message + FUNC_NAME);
+        process.exit(1);
+    }
+};
+sendEmailNotification();
+=End Of Send Notification===========
+
+
+========testreq.json==========
+{
+     "nApplicationId":999,
+     "sApplicationRefId":"asd",
+     "sNotificationType":"email",
+     "sTransactionId":"asd",
+     "emailParamDto":
+     {
+         "sSubject":"Trade Confirmation Report",
+         "sTo":"ramesh.rathod01@63moons.com",
+         "sCc":"",
+	     "sBcc":"",
+         "sBody":"Hi this is test mail",
+         "isHtmlBody":true,
+         "sTemplateName":"",
+         "mapData":
+          {
+             "tenantName":"MyStore",
+             "adminUserId":"AdminUser",
+             "adminUserPassword":"AdminUserPassword",
+             "operationalUserId":"OprUserID",
+             "operationalUserPassword":"OprUserIDPassword",
+             "loginURL":"URL"
+         }      
+
+     },
+     "smsParamDto":{}
+}
+==================
+
+=====Email notification Call For Forgot Password========
+
+
+    //Forgot Password
+    forgotPassword: function (request, response) {
+        const FUNC_NAME = " forgotPassword() ";
+        var responseData = {};
+        responseData.status = 1;
+        try {
+            //    console.log(request.body);
+            var email = request.body.email;
+
+            if (email == undefined || email == '') {
+                responseData[global.message] = "Invalid Email Address.";
+                responseData.status = -1;
+                response.status(300).send(responseData);
+                return;
+            }
+            var requestData = {};
+            requestData.email = email;
+            // console.log("API Call received");              
+
+            dbService.callDBService("forgotPassword", requestData).then(function (resp) {
+                if (JSON.parse(resp).length > 0) {
+                    var userData = JSON.parse(resp)[0];
+                    var tempPassword = randomstring.generate(8);
+
+                    //send email notification
+                    var currntdatetime = moment(new Date()).format("YYYYMMDDHHmmssms");
+                    var resetID = email + currntdatetime + global.SALT;
+                    resetID = md5(resetID);
+                    var resetLink = global.PASSWORD_RESET_LINK + resetID;
+                   // console.log(resetLink);
+                    var command = 'node ' + 'd:\\FTWorks\\WebSiteDocs\\server\\email_notification\\sendEmailNotification.js "T2-FORGOT_PASSWORD" ' + '"' + email + '" "' + resetLink + '"';
+                   // console.log(command);
+                    exec(command,
+                        function (error, stdout, stderr) {
+                            if (error !== null) {
+                                // console.log('exec error: ' + error);
+                                responseData.status = -1;
+                                responseData[global.message] = "Something went wrong while password reset, Please try again.";
+                                response.status(300).send(responseData);
+                                console.log(err.message + FUNC_NAME);
+                            }
+                            else {
+                                responseData[global.message] = "Password verification link has been sent to your email id.";
+                                response.status(300).send(responseData);
+                                global.forgotPasswordMap[resetID] = {};
+                                global.forgotPasswordMap[resetID].tempPassword = tempPassword;
+                                global.forgotPasswordMap[resetID].currntDateTime = moment(new Date()).format("YYYY-MM-DD HH:mm:ss");
+                                global.forgotPasswordMap[resetID].userId = email;
+                                global.forgotPasswordMap[resetID].customerId = userData.nCustomerId;
+                            }
+                        });
+
+
+                } else {
+                    responseData[global.message] = "Email does not exist.";
+                    responseData.status = -1;
+                    response.status(300).send(responseData);
+                    return;
+                }
+
+            }).catch(function (err) {
+                responseData.status = -1;
+                responseData[global.message] = "Something went wrong while password reset, Please try again.";
+                response.status(300).send(responseData);
+                console.log(err.message + FUNC_NAME);
+            })
+
+        } catch (err) {
+            responseData.status = -1;
+            responseData[global.message] = "Something went wrong while password reset, Please try again.";
+            response.status(300).send(responseData);
+            console.log(err.message + FUNC_NAME);
+
+        }
+    },=========================

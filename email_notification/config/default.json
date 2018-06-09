@@ -1,0 +1,19 @@
+{
+    "Config"     : {
+      "port"              : 12160
+    },
+    "BillingURL" : "https://www.google.co.in/",
+    "Database"   : {
+      "host"     : "",
+      "user"     : "",
+      "password" : "",
+      "database" : ""
+    },
+    "EmailService"   : {
+  
+        "host"     : "",
+        "port"     : "",
+       "sendNotificationUrl" : "/sendNotificationRequest",
+       "getEmailUrl" : "/getEmail"
+    }
+  }

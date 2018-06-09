@@ -1,0 +1,23 @@
+{
+    "db": {
+      "user": "root",
+      "password": "",
+      "server": "",
+      "name": "",
+      "port": ""
+    },
+    "LoggingConf":{
+    "appenders": {
+      "out": { "type": "file","filename" : "out.log" ,"layout": { "type": "json", "separator": "," } }
+    },
+    "categories": {
+      "default": { "appenders": ["out"], "level": "error" }
+    }
+  },
+    "server":
+    {
+    "port" : "12162",
+    "LoggingDir" : "./logs/",
+    "QueryRespCount" : "101"
+    }
+  }
